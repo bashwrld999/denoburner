@@ -1,0 +1,16 @@
+{
+  "workspace": [
+    "./packages/denoburner",
+    "./packages/denoburner-template"
+  ],
+  "tasks": {
+    "dev": "deno run -A packages/denoburner/src/cli/index.ts dev",
+    "build": "deno run -A packages/denoburner/src/cli/index.ts build",
+    "download": "deno run -A packages/denoburner/src/cli/index.ts download",
+    "test": "deno test -A packages/denoburner",
+    "check": "deno check packages/denoburner/mod.ts packages/denoburner/src/cli/index.ts"
+  },
+  "imports": {
+    "denoburner": "./packages/denoburner/mod.ts"
+  }
+}
