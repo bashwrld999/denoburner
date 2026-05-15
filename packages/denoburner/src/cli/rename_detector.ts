@@ -1,8 +1,9 @@
 import { relative } from "@std/path";
-import { parseServerPath } from "../pipeline/servers.ts";
+import type { SourceEntry } from "../config/types.ts";
+import { resolveSourcePath } from "../pipeline/source-mapper.ts";
 import { DeleteFileCommand } from "../rpc/commands/delete_file_command.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 import type { RpcCommandExecutor } from "../rpc/command.ts";
-import type { DenoburnerConfig } from "../config/types.ts";
 import type { DependencyGraph } from "../watcher/dependency-graph.ts";
 import type { ILogger } from "../logger/interfaces.ts";
 
@@ -10,8 +11,9 @@ export class RenameDetector {
   private pendingDeletes = new Set<string>();
 
   constructor(
-    private config: DenoburnerConfig,
+    private sources: SourceEntry[],
     private cwd: string,
+    private defaultServer: string,
     private depGraph: DependencyGraph,
     private addToBatcher: (path: string) => void,
   ) {}
@@ -47,14 +49,15 @@ export class RenameDetector {
 
   async flushDeletes(executor: RpcCommandExecutor, log: ILogger): Promise<void> {
     for (const oldPath of this.pendingDeletes) {
-      const parsed = parseServerPath(oldPath, this.config.serversDir);
-      const gameFile = parsed ? parsed.relativePath : relative(this.cwd, oldPath);
+      const result = resolveSourcePath(oldPath, this.sources, this.cwd, this.defaultServer);
+      const server = result?.server ?? this.defaultServer;
+      const gameFile = result?.filename ?? relative(this.cwd, oldPath);
       try {
-        const cmd = new DeleteFileCommand({ server: this.config.defaultServer, filename: gameFile });
+        const cmd = new DeleteFileCommand({ server, filename: gameFile });
         await executor.execute(cmd);
-        log.info(`File deleted: ${this.config.defaultServer}/${gameFile}`);
+        log.info(`File deleted: ${server}/${gameFile}`);
       } catch (err) {
-        log.warn(`Could not delete ${this.config.defaultServer}/${gameFile}: ${err}`);
+        log.warn(`Could not delete ${server}/${gameFile}: ${toDenoburnerError(err).message}`);
       }
     }
     this.pendingDeletes.clear();

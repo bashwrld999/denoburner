@@ -1,5 +1,6 @@
 import type { IServer, IClientConnection } from "./interfaces.ts";
 import type { ILogger } from "../logger/interfaces.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 
 export interface WebSocketServerOptions {
   host: string;
@@ -66,7 +67,7 @@ export class WebSocketServer implements IServer {
         startedPromise.resolve();
       },
       onError: (err) => {
-        this.logger.error(`Server error: ${err}`);
+        this.logger.error(`Server error: ${toDenoburnerError(err).message}`);
         startedPromise.reject(err);
         return new Response("Internal Server Error", { status: 500 });
       },
@@ -83,13 +84,13 @@ export class WebSocketServer implements IServer {
       socket.onopen = () => {
         this.logger.info(`Client connected: ${client.id}`);
         for (const handler of this.connectionHandlers) {
-          try { handler(client); } catch (e) { this.logger.error(`Connection handler error: ${e}`); }
+          try { handler(client); } catch (e) { this.logger.error(`Connection handler error: ${toDenoburnerError(e).message}`); }
         }
       };
 
       socket.onmessage = (event) => {
         for (const handler of this.messageHandlers) {
-          try { handler(event.data as string, client); } catch (e) { this.logger.error(`Message handler error: ${e}`); }
+          try { handler(event.data as string, client); } catch (e) { this.logger.error(`Message handler error: ${toDenoburnerError(e).message}`); }
         }
       };
 
@@ -97,7 +98,7 @@ export class WebSocketServer implements IServer {
         this.activeClients.delete(client.id);
         this.logger.info(`Client disconnected: ${client.id}`);
         for (const handler of this.disconnectHandlers) {
-          try { handler(client); } catch (e) { this.logger.error(`Disconnect handler error: ${e}`); }
+          try { handler(client); } catch (e) { this.logger.error(`Disconnect handler error: ${toDenoburnerError(e).message}`); }
         }
       };
 

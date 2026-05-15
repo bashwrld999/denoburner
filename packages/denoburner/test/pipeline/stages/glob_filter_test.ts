@@ -1,21 +1,9 @@
 import { assertEquals } from "@std/assert";
 import { GlobFilterStage } from "../../../src/pipeline/stages/glob_filter.ts";
-import type { DenoburnerConfig } from "../../../src/config/types.ts";
+import type { SourceEntry } from "../../../src/config/types.ts";
 import type { PipelineContext } from "../../../src/pipeline/types.ts";
 
-const baseConfig: DenoburnerConfig = {
-  defaultServer: "home",
-  port: 12525,
-  host: "localhost",
-  watch: [
-    { pattern: "**/*.ts", mode: "bundle" },
-    { pattern: "**/*.txt", mode: "passthrough" },
-    { pattern: "{a,b}/**/*.ts", mode: "bundle" },
-    { pattern: "[ch]at.ts", mode: "transpile" },
-    { pattern: "??.ts", mode: "passthrough" },
-    { pattern: "file?.ts", mode: "bundle" },
-  ],
-};
+const sources: SourceEntry[] = [{ dir: "/project/src" }];
 
 function makeCtx(localPath: string): PipelineContext {
   return {
@@ -26,86 +14,67 @@ function makeCtx(localPath: string): PipelineContext {
   };
 }
 
-Deno.test("GlobFilterStage — matches .ts file", async () => {
-  const stage = new GlobFilterStage(baseConfig);
-  const ctx = makeCtx("/project/src/servers/home/hack.ts");
+Deno.test("GlobFilterStage — resolves .ts file under source", async () => {
+  const stage = new GlobFilterStage(sources, "/project", "home");
+  const ctx = makeCtx("/project/src/home/hack.ts");
   await stage.execute(ctx);
   assertEquals(ctx.skipped, undefined);
   assertEquals(ctx.mode, "bundle");
+  assertEquals(ctx.gameServer, "home");
+  assertEquals(ctx.gameFilename, "hack.ts");
 });
 
-Deno.test("GlobFilterStage — matches .txt file", async () => {
-  const stage = new GlobFilterStage(baseConfig);
+Deno.test("GlobFilterStage — resolves .txt file as passthrough", async () => {
+  const stage = new GlobFilterStage(sources, "/project", "home");
   const ctx = makeCtx("/project/src/data/notes.txt");
   await stage.execute(ctx);
   assertEquals(ctx.skipped, undefined);
   assertEquals(ctx.mode, "passthrough");
+  assertEquals(ctx.gameServer, "data");
+  assertEquals(ctx.gameFilename, "notes.txt");
 });
 
-Deno.test("GlobFilterStage — skips non-matching file", async () => {
-  const stage = new GlobFilterStage(baseConfig);
-  const ctx = makeCtx("/project/src/secret.json");
-  await stage.execute(ctx);
-  assertEquals(ctx.skipped, true);
-  assertEquals(ctx.skipReason?.includes("secret.json"), true);
-});
-
-Deno.test("GlobFilterStage — ignores matching file in ignore list", async () => {
-  const config: DenoburnerConfig = {
-    ...baseConfig,
-    ignore: ["**/*.d.ts"],
-  };
-  const stage = new GlobFilterStage(config);
-  const ctx = makeCtx("/project/src/types.d.ts");
+Deno.test("GlobFilterStage — skips file outside source", async () => {
+  const stage = new GlobFilterStage(sources, "/project", "home");
+  const ctx = makeCtx("/project/lib/secret.json");
   await stage.execute(ctx);
   assertEquals(ctx.skipped, true);
 });
 
-Deno.test("GlobFilterStage — brace expansion {a,b}", async () => {
-  const stage = new GlobFilterStage(baseConfig);
-  const ctxA = makeCtx("/project/src/a/test.ts");
-  await stage.execute(ctxA);
-  assertEquals(ctxA.mode, "bundle");
-
-  const ctxB = makeCtx("/project/src/b/test.ts");
-  await stage.execute(ctxB);
-  assertEquals(ctxB.mode, "bundle");
+Deno.test("GlobFilterStage — file at source root uses defaultServer", async () => {
+  const stage = new GlobFilterStage(sources, "/project", "home");
+  const ctx = makeCtx("/project/src/lib.ts");
+  await stage.execute(ctx);
+  assertEquals(ctx.skipped, undefined);
+  assertEquals(ctx.gameServer, "home");
+  assertEquals(ctx.gameFilename, "lib.ts");
 });
 
-Deno.test("GlobFilterStage — character class [ch]", async () => {
-  const config: DenoburnerConfig = {
-    ...baseConfig,
-    watch: [{ pattern: "[ch]at.ts", mode: "transpile" }],
-  };
-  const stage = new GlobFilterStage(config);
-  const ctx = makeCtx(Deno.cwd() + "/cat.ts");
+Deno.test("GlobFilterStage — source with server override", async () => {
+  const overrideSources: SourceEntry[] = [{ dir: "/project/src", server: "foodnstuff" }];
+  const stage = new GlobFilterStage(overrideSources, "/project", "home");
+  const ctx = makeCtx("/project/src/home/hack.ts");
+  await stage.execute(ctx);
+  assertEquals(ctx.gameServer, "foodnstuff");
+  assertEquals(ctx.gameFilename, "home/hack.ts");
+});
+
+Deno.test("GlobFilterStage — source mode overrides auto-detect", async () => {
+  const fixedSources: SourceEntry[] = [{ dir: "/project/src", mode: "transpile" }];
+  const stage = new GlobFilterStage(fixedSources, "/project", "home");
+  const ctx = makeCtx("/project/src/home/main.ts");
   await stage.execute(ctx);
   assertEquals(ctx.mode, "transpile");
 });
 
-Deno.test("GlobFilterStage — single char wildcard", async () => {
-  const config: DenoburnerConfig = {
-    ...baseConfig,
-    watch: [{ pattern: "??.ts", mode: "passthrough" }],
-  };
-  const stage = new GlobFilterStage(config);
-  const ctx = makeCtx(Deno.cwd() + "/ab.ts");
+Deno.test("GlobFilterStage — multiple sources, first match wins", async () => {
+  const multiSources: SourceEntry[] = [
+    { dir: "/project/shared", server: "home" },
+    { dir: "/project/src" },
+  ];
+  const stage = new GlobFilterStage(multiSources, "/project", "home");
+  const ctx = makeCtx("/project/shared/lib/utils.ts");
   await stage.execute(ctx);
-  assertEquals(ctx.mode, "passthrough");
-
-  const ctxB = makeCtx(Deno.cwd() + "/abc.ts");
-  await stage.execute(ctxB);
-  assertEquals(ctxB.skipped, true);
-});
-
-Deno.test("GlobFilterStage — zero-segment ** match", async () => {
-  const config: DenoburnerConfig = {
-    ...baseConfig,
-    watch: [{ pattern: "**/test.ts", mode: "bundle" }],
-  };
-  const stage = new GlobFilterStage(config);
-  const ctx = makeCtx("/project/src/test.ts");
-  await stage.execute(ctx);
-  assertEquals(ctx.skipped, undefined);
-  assertEquals(ctx.mode, "bundle");
+  assertEquals(ctx.gameServer, "home");
+  assertEquals(ctx.gameFilename, "lib/utils.ts");
 });

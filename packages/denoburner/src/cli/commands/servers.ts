@@ -1,12 +1,11 @@
 import { defineCommand } from "citty";
 import { Logger } from "../../logger/logger.ts";
 import { ConsoleTransport } from "../../logger/console_transport.ts";
-import { WsClient } from "../../server/ws_client.ts";
-import { RpcClient } from "../../rpc/client.ts";
-import { PendingRequestMap } from "../../rpc/pending_requests.ts";
-import { RpcDispatcher } from "../../rpc/dispatcher.ts";
 import { loadConfig } from "../../config/loader.ts";
 import type { DenoburnerConfig } from "../../config/types.ts";
+import { toDenoburnerError } from "../../core/errors.ts";
+import { connectRpcClient } from "../../cli/connect.ts";
+import { parsePort } from "../port.ts";
 
 export default defineCommand({
   meta: {
@@ -28,24 +27,13 @@ export default defineCommand({
 
     const logger = new Logger();
     logger.addTransport(new ConsoleTransport(true));
-    const wsUrl = `ws://${mergedConfig.host}:${mergedConfig.port}`;
 
-    logger.info(`Connecting to ${wsUrl}...`);
-
-    const client = new WsClient(logger);
-    const pending = new PendingRequestMap(10_000);
-    const dispatcher = new RpcDispatcher(pending, logger);
-    const rpcClient = new RpcClient(
-      { send: (msg) => client.send(msg) },
-      pending,
+    const { rpcClient, close } = await connectRpcClient(
+      mergedConfig.host ?? "localhost",
+      mergedConfig.port ?? 12525,
       logger,
+      10_000,
     );
-
-    client.onMessage((data) => dispatcher.dispatch(data, {
-      send: (msg) => client.send(msg),
-    }));
-
-    await client.connect(wsUrl);
 
     try {
       const servers = await rpcClient.sendRequest<string[]>("getAllServers");
@@ -87,9 +75,9 @@ export default defineCommand({
       console.log(sep);
       logger.success(`${rows.length} server(s) found`);
     } catch (err) {
-      logger.error(`Failed to list servers: ${err}`);
+      logger.error(`Failed to list servers: ${toDenoburnerError(err).message}`);
     } finally {
-      client.close();
+      close();
     }
   },
 });

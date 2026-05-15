@@ -2,13 +2,11 @@ import { defineCommand } from "citty";
 import { resolve, basename } from "@std/path";
 import { Logger } from "../../logger/logger.ts";
 import { ConsoleTransport } from "../../logger/console_transport.ts";
-import { WsClient } from "../../server/ws_client.ts";
-import { RpcClient } from "../../rpc/client.ts";
-import { PendingRequestMap } from "../../rpc/pending_requests.ts";
-import { RpcDispatcher } from "../../rpc/dispatcher.ts";
 import { RpcCommandExecutor } from "../../rpc/command.ts";
 import { PushFileCommand } from "../../rpc/commands/push_file_command.ts";
 import { loadConfig } from "../../config/loader.ts";
+import { connectRpcClient } from "../../cli/connect.ts";
+import { toDenoburnerError } from "../../core/errors.ts";
 
 export default defineCommand({
   meta: {
@@ -32,24 +30,13 @@ export default defineCommand({
     const content = await Deno.readTextFile(scriptPath);
     const filename = basename(scriptPath);
     const targetServer = args.server || config.defaultServer || "home";
-    const wsUrl = `ws://${args.host || config.host}:${parseInt(args.port) || config.port}`;
 
-    logger.info(`Connecting to ${wsUrl}...`);
-
-    const client = new WsClient(logger);
-    const pending = new PendingRequestMap(120_000);
-    const dispatcher = new RpcDispatcher(pending, logger);
-    const rpcClient = new RpcClient(
-      { send: (msg) => client.send(msg) },
-      pending,
+    const { rpcClient, close } = await connectRpcClient(
+      args.host || config.host || "localhost",
+      parseInt(args.port) || config.port || 12525,
       logger,
+      120_000,
     );
-
-    client.onMessage((data) => dispatcher.dispatch(data, {
-      send: (msg) => client.send(msg),
-    }));
-
-    await client.connect(wsUrl);
 
     try {
       const executor = new RpcCommandExecutor(rpcClient, logger);
@@ -72,10 +59,10 @@ export default defineCommand({
       const output = typeof result === "string" ? result : JSON.stringify(result, null, 2);
       console.log(output);
     } catch (err) {
-      logger.error(`exec failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(`exec failed: ${toDenoburnerError(err).message}`);
       Deno.exit(1);
     } finally {
-      client.close();
+      close();
     }
   },
 });

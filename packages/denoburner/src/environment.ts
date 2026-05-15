@@ -2,7 +2,6 @@ import type { DenoburnerConfig } from "./config/types.ts";
 import type { ILogger } from "./logger/interfaces.ts";
 import type { IRpcClient } from "./rpc/client.ts";
 
-import { RpcRegistry } from "./rpc/registry.ts";
 import { RpcDispatcher } from "./rpc/dispatcher.ts";
 import { RpcClient } from "./rpc/client.ts";
 import { PendingRequestMap } from "./rpc/pending_requests.ts";
@@ -10,6 +9,7 @@ import { RpcCommandExecutor } from "./rpc/command.ts";
 import { WebSocketServer } from "./server/websocket_server.ts";
 import { TuiEventBus } from "./tui/event_bus.ts";
 import { FileCache, createFileCache } from "./state/cache.ts";
+import { toDenoburnerError } from "./core/errors.ts";
 import { UploadQueueManager } from "./state/queue.ts";
 import { PushFileCommand } from "./rpc/commands/push_file_command.ts";
 
@@ -38,9 +38,8 @@ export function createDevEnvironment(
 ): DevEnvironment {
   const eventBus = new TuiEventBus(logger);
   const pending = new PendingRequestMap(config.timeout ?? 30_000);
-  const registry = new RpcRegistry();
-  const dispatcher = new RpcDispatcher(pending, logger, registry);
-  const rpcClient = new RpcClient({ send: () => {} }, pending, logger);
+  const dispatcher = new RpcDispatcher(pending, logger);
+  const rpcClient = new RpcClient(pending, logger);
   const commandExecutor = new RpcCommandExecutor(rpcClient, logger, 2);
   const cache = createFileCache();
   const uploadQueue = new UploadQueueManager();
@@ -63,14 +62,14 @@ export function createDevEnvironment(
     } catch (err) {
       const qs = uploadQueue.getStats();
       eventBus.emit({ type: "queue_update", ...qs });
-      ql.warn(`Upload failed: ${item.gameFilename} - ${err instanceof Error ? err.message : String(err)}`);
+      ql.warn(`Upload failed: ${item.gameFilename} - ${toDenoburnerError(err).message}`);
       return false;
     }
   });
 
   const server = new WebSocketServer({
-    host: config.host,
-    port: config.port,
+    host: config.host ?? "localhost",
+    port: config.port ?? 12525,
     logger,
   });
 
@@ -88,7 +87,7 @@ export function createDevEnvironment(
   server.onDisconnect((client) => {
     const active = server.getActiveClient();
     if (!active) {
-      rpcClient.setSender({ send: () => {} });
+      rpcClient.setSender(null);
       uploadQueue.setOffline(true);
     }
     eventBus.emit({ type: "client_disconnected", clientId: client.id });

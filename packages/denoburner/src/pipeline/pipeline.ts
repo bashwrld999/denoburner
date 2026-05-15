@@ -1,4 +1,5 @@
 import type { PipelineContext, PipelineStage, IPipeline } from "./types.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 
 const DEFAULT_CONCURRENCY = 8;
 
@@ -22,9 +23,8 @@ export class UploadPipeline implements IPipeline {
       try {
         await stage.execute(ctx);
       } catch (err) {
-        // Preserve the first error; cascade errors from dependent stages don't overwrite it
         if (!ctx.error) {
-          ctx.error = err instanceof Error ? err : new Error(String(err));
+          ctx.error = toDenoburnerError(err);
         }
       }
     }

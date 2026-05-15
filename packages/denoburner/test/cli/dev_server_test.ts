@@ -1,87 +1,77 @@
 import { assertEquals, assert } from "@std/assert";
 import { SilentRenderer } from "../../src/tui/silent_renderer.ts";
-import { Logger } from "../../src/logger/logger.ts";
-import { ConsoleTransport } from "../../src/logger/console_transport.ts";
-import { TuiEventBus } from "../../src/tui/event_bus.ts";
-import { FileCache } from "../../src/state/cache.ts";
-import { UploadQueueManager } from "../../src/state/queue.ts";
+import { DevServer } from "../../src/cli/dev_server.ts";
 import { DenoFileWatcher } from "../../src/watcher/deno_file_watcher.ts";
 import { DependencyGraph } from "../../src/watcher/dependency-graph.ts";
-import { IdentityBundler } from "../../src/bundler/identity_bundler.ts";
-import { DevServer } from "../../src/cli/dev_server.ts";
-import { RpcCommandExecutor } from "../../src/rpc/command.ts";
 import type { DenoburnerConfig } from "../../src/config/types.ts";
-import type { DevEnvironment } from "../../src/main.ts";
-import { PendingRequestMap } from "../../src/rpc/pending_requests.ts";
-import type { IRpcClient } from "../../src/rpc/client.ts";
-
-const logger = { info() {}, success() {}, warn() {}, error() {}, child() { return this; } } as any;
+import { makeMockEnv, MockLogger, MockBundler } from "../support/mocks.ts";
 
 const config: DenoburnerConfig = {
   defaultServer: "home",
   port: 0,
   host: "localhost",
-  watch: [{ pattern: "**/*.ts", mode: "passthrough" }],
-  ignoreInitial: true,
+  sources: [],
+  skipInitialSync: true,
 };
 
-function makeEnv(): DevEnvironment {
-  const mockRpc: IRpcClient = { sendRequest: () => Promise.resolve({ success: true }) };
-  return {
-    server: { start: async () => {}, stop: async () => {} } as any,
-    rpcClient: mockRpc,
-    commandExecutor: new RpcCommandExecutor(mockRpc, logger, 0),
-    eventBus: new TuiEventBus(),
-    cache: new FileCache(),
-    uploadQueue: new UploadQueueManager({ maxRetries: 0, baseDelayMs: 10 }),
-    pendingRequests: new PendingRequestMap(),
-  };
-}
-
 Deno.test("DevServer — creates without error", () => {
-  const renderer = new SilentRenderer();
-  const env = makeEnv();
-  const graph = new DependencyGraph();
-  const watcher = new DenoFileWatcher();
-  const bundler = new IdentityBundler();
-  const log = new Logger();
-  log.addTransport(new ConsoleTransport(false));
-
-  const server = new DevServer(config, renderer, log, env, bundler, graph, watcher, "/tmp", false, false);
+  const server = new DevServer(
+    config, new SilentRenderer(), new MockLogger(), makeMockEnv(),
+    new MockBundler(), new DependencyGraph(), new DenoFileWatcher(),
+    "/tmp", false, false, false, undefined, false,
+  );
   assert(server !== null);
 });
 
 Deno.test("DevServer — stop is safe before start", async () => {
-  (globalThis as any).__test = true;
-  const renderer = new SilentRenderer();
-  const env = makeEnv();
-  const server = new DevServer(config, renderer, logger, env, new IdentityBundler(), new DependencyGraph(), new DenoFileWatcher(), "/tmp", false, false);
-  // Should not throw
+  const server = new DevServer(
+    config, new SilentRenderer(), new MockLogger(), makeMockEnv(),
+    new MockBundler(), new DependencyGraph(), new DenoFileWatcher(),
+    "/tmp", false, false, false, undefined, false,
+  );
   await server.stop();
 });
 
-Deno.test("DevServer — start creates loggers and pipeline", async () => {
-  (globalThis as any).__test = true;
-  const tmpDir = await Deno.makeTempDir({ prefix: "dv-" });
-  await Deno.writeTextFile(tmpDir + "/test.ts", "export function main() {}");
-
-  const renderer = new SilentRenderer();
-  const env = makeEnv();
-  const graph = new DependencyGraph();
-  const watcher = new DenoFileWatcher();
-  const bundler = new IdentityBundler();
-  const log = new Logger();
-  log.addTransport(new ConsoleTransport(false));
-
+Deno.test("DevServer — stop rejects pending requests", async () => {
+  const env = makeMockEnv();
   const server = new DevServer(
-    { ...config, ignoreInitial: false, watch: [{ pattern: "**/*.ts", mode: "passthrough" }] },
-    renderer, log, env, bundler, graph, watcher, tmpDir, false, false,
+    config, new SilentRenderer(), new MockLogger(), env,
+    new MockBundler(), new DependencyGraph(), new DenoFileWatcher(),
+    "/tmp", false, false, false, undefined, false,
   );
 
-  // start() will scan files and run initial sync
-  await server.start();
-  assertEquals(renderer.stats.watchedCount >= 1, true);
+  const { promise } = env.pendingRequests.add("testMethod");
+  assertEquals(env.pendingRequests.size, 1);
 
   await server.stop();
-  await Deno.remove(tmpDir, { recursive: true });
+
+  assertEquals(env.pendingRequests.size, 0);
+  let rejected = false;
+  try {
+    await promise;
+  } catch {
+    rejected = true;
+  }
+  assertEquals(rejected, true);
+});
+
+Deno.test("DevServer — stop drains upload queue", async () => {
+  const env = makeMockEnv();
+  const server = new DevServer(
+    config, new SilentRenderer(), new MockLogger(), env,
+    new MockBundler(), new DependencyGraph(), new DenoFileWatcher(),
+    "/tmp", false, false, false, undefined, false,
+  );
+
+  env.uploadQueue.enqueue({
+    filePath: "/tmp/test.ts",
+    content: "export function main() {}",
+    gameServer: "home",
+    gameFilename: "test.ts",
+  });
+  assertEquals(env.uploadQueue.getStats().pending, 1);
+
+  await server.stop();
+  const stats = env.uploadQueue.getStats();
+  assertEquals(stats.processing, false);
 });

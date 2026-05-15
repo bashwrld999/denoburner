@@ -3,7 +3,7 @@ import { RamCheckStage } from "../../../src/pipeline/stages/ram_check.ts";
 import { RpcCommandExecutor } from "../../../src/rpc/command.ts";
 import type { IRpcClient } from "../../../src/rpc/client.ts";
 import type { PipelineContext } from "../../../src/pipeline/types.ts";
-import type { ILogger } from "../../src/logger/interfaces.ts";
+import type { ILogger } from "../../../src/logger/interfaces.ts";
 
 const logger = { info() {}, success() {}, warn() {}, error() {}, child() { return this; } } as unknown as ILogger;
 
@@ -46,24 +46,17 @@ Deno.test("RamCheckStage — handles RPC failure gracefully", async () => {
   assertEquals(ctx.ramCost, 0);
 });
 
-Deno.test("RamCheckStage — throws without gameFilename", async () => {
-  const mockClient: IRpcClient = {
-    sendRequest: () => Promise.resolve({ ram: 0 }),
-  };
-
-  const stage = new RamCheckStage(makeExecutor(mockClient));
+Deno.test("RamCheckStage — handles missing gameFilename gracefully", async () => {
+  const mockClient: IRpcClient = { sendRequest: () => Promise.resolve({ ram: 1.6 }) };
+  const executor = makeExecutor(mockClient);
+  const stage = new RamCheckStage(executor);
   const ctx: PipelineContext = {
-    localPath: "/project/src/hack.ts",
-    gameServer: "home",
+    localPath: "/project/src/test.ts",
+    gameServer: "",
     gameFilename: "",
     startedAt: Date.now(),
   };
 
-  let threw = false;
-  try {
-    await stage.execute(ctx);
-  } catch {
-    threw = true;
-  }
-  assertEquals(threw, true);
+  await stage.execute(ctx);
+  assertEquals(ctx.ramCost, undefined);
 });

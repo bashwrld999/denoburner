@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assert } from "@std/assert";
 import { BundleStage } from "../../../src/pipeline/stages/bundle.ts";
 import { IdentityBundler } from "../../../src/bundler/identity_bundler.ts";
 import { EsbuildBundler } from "../../../src/bundler/esbuild_bundler.ts";
@@ -37,7 +37,7 @@ Deno.test("BundleStage — transpile mode with IdentityBundler", async () => {
 Deno.test("BundleStage — bundle mode with IdentityBundler (noop)", async () => {
   const stage = new BundleStage(new IdentityBundler());
   const ctx: PipelineContext = {
-    localPath: "/project/src/servers/home/hack.ts",
+    localPath: "/project/src/home/hack.ts",
     gameServer: "",
     gameFilename: "hack.ts",
     rawContent: "export async function main(ns) {}",
@@ -89,5 +89,32 @@ Deno.test({
     assertEquals(ctx.bundledContent!.includes("const x = 42"), true);
 
     await bundler.close!();
+  },
+});
+
+Deno.test({
+  name: "BundleStage — esbuild bundle mode produces valid output",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const tmp = await Deno.makeTempDir({ prefix: "db-bundle-" });
+    const filePath = `${tmp}/home/hack.ts`;
+    await Deno.mkdir(`${tmp}/home`, { recursive: true });
+    await Deno.writeTextFile(filePath,
+      "export async function main(ns: NS) { ns.print('hi'); }");
+    const bundler = new EsbuildBundler();
+    const stage = new BundleStage(bundler, [{ dir: tmp }], tmp);
+    const ctx: PipelineContext = {
+      localPath: filePath,
+      gameServer: "", gameFilename: "hack.ts", startedAt: Date.now(),
+      rawContent: await Deno.readTextFile(filePath),
+      mode: "bundle",
+    };
+    await stage.execute(ctx);
+    assert(ctx.bundledContent, "bundled content should exist");
+    assert(ctx.bundledContent!.includes("main"), "output should contain main function");
+    assert(!ctx.bundledContent!.includes(": NS"), "TypeScript annotations should be stripped");
+    await bundler.close!();
+    await Deno.remove(tmp, { recursive: true });
   },
 });

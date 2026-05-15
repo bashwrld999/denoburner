@@ -61,6 +61,7 @@ export class EsbuildBundler implements IBundler {
       format: "esm",
       platform: "browser",
       write: false,
+      logLevel: "silent",
       sourcemap: this.sourceMap ? "inline" : false,
       minify: this.minify,
       plugins: [
@@ -95,11 +96,35 @@ export class EsbuildBundler implements IBundler {
 
   private createSmartExternalPlugin(serverRoot: string) {
     const normalizedRoot = resolve(serverRoot);
+    const JS_LIKE = /\.(ts|tsx|js|jsx|mjs|cjs)$/i;
     return {
       name: "smart-external",
       setup(build: esbuild.PluginBuild) {
+        build.onResolve({ filter: /\.css$/ }, (args) => ({
+          path: resolve(args.resolveDir, args.path),
+          namespace: "css-inline",
+        }));
+        build.onLoad({ filter: /.*/, namespace: "css-inline" }, async (args) => {
+          const file = await Deno.readTextFile(args.path);
+          const css = JSON.stringify(file);
+          const id = "deno-css-" + simpleId(args.path);
+          return {
+            contents: [
+              `(function(){`,
+              `var id=${JSON.stringify(id)};`,
+              `var css=${css};`,
+              `var el=document.getElementById(id);`,
+              `if(el){el.textContent=css}`,
+              `else{el=document.createElement("style");el.id=id;el.textContent=css;document.head.appendChild(el)}`,
+              `})();`,
+              `export default ${css};`,
+            ].join(""),
+            loader: "js",
+          };
+        });
         build.onResolve({ filter: /.*/ }, (args: esbuild.OnResolveArgs) => {
           if (args.kind === "entry-point") return undefined;
+          if (!JS_LIKE.test(args.path)) return undefined;
           const resolved = resolve(args.resolveDir, args.path);
           if (resolved.startsWith(normalizedRoot + "/") || resolved === normalizedRoot) {
             return { external: true, path: args.path };
@@ -117,4 +142,10 @@ export class EsbuildBundler implements IBundler {
   async close(): Promise<void> {
     esbuild.stop();
   }
+}
+
+function simpleId(filePath: string): string {
+  let h = 5381;
+  for (let i = 0; i < filePath.length; i++) h = (h * 33 + filePath.charCodeAt(i)) | 0;
+  return "s" + (h >>> 0).toString(36);
 }

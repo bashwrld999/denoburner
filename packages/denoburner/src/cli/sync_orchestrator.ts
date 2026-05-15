@@ -1,10 +1,11 @@
 import { walk } from "@std/fs";
 import { relative, dirname, resolve } from "@std/path";
+import ignore from "ignore";
 import type { IPipeline, PipelineContext } from "../pipeline/types.ts";
 import type { DependencyGraph } from "../watcher/dependency-graph.ts";
 import type { ILogger } from "../logger/interfaces.ts";
 import type { DenoburnerConfig } from "../config/types.ts";
-import { getWatchRoots } from "../pipeline/servers.ts";
+import { getSourceDirs } from "../pipeline/source-mapper.ts";
 
 export class SyncOrchestrator {
   files: string[] = [];
@@ -20,13 +21,16 @@ export class SyncOrchestrator {
 
   async scanFiles(): Promise<void> {
     this.files = [];
-    const roots = getWatchRoots(this.config, this.cwd);
-    for (const root of roots) {
+    const dirs = getSourceDirs(this.config.sources ?? [], this.cwd);
+    const filter = createGitignoreFilter(this.cwd);
+    for (const root of dirs) {
       for await (const entry of walk(root, {
-        exts: [".ts", ".js", ".jsx", ".tsx", ".txt", ".script"],
-        skip: [/\.d\.ts$/, /denoburner\.config\.(ts|js)$/],
+        exts: [".ts", ".js", ".jsx", ".tsx", ".txt", ".script", ".json", ".md", ".mjs", ".cjs", ".mts", ".cts"],
+        skip: [/\.d\.ts$/, /(^|\/)\.\w/],
       })) {
-        if (entry.isFile) this.files.push(entry.path);
+        if (entry.isFile && !entry.name.startsWith(".") && !filter(entry.path)) {
+          this.files.push(entry.path);
+        }
       }
     }
   }
@@ -38,7 +42,7 @@ export class SyncOrchestrator {
   }
 
   async runInitialSync(): Promise<number> {
-    if (this.config.ignoreInitial) return 0;
+    if (this.config.skipInitialSync) return 0;
 
     this.syncLog.info(`Uploading ${this.files.length} files...`);
 
@@ -53,7 +57,7 @@ export class SyncOrchestrator {
       const chunk = this.files.slice(i, i + CHUNK_SIZE);
       const contexts: PipelineContext[] = chunk.map((f) => ({
         localPath: f,
-        gameServer: this.config.defaultServer,
+        gameServer: this.config.defaultServer ?? "home",
         gameFilename: relative(this.cwd, f),
         startedAt: Date.now(),
       }));
@@ -118,4 +122,17 @@ export function resolveImportPath(sourceFile: string, importPath: string): strin
     return resolve(sourceDir, importPath);
   }
   return null;
+}
+
+function createGitignoreFilter(cwd: string): (path: string) => boolean {
+  try {
+    const content = Deno.readTextFileSync(resolve(cwd, ".gitignore"));
+    const ig = ignore().add(content);
+    return (path: string) => {
+      const rel = path.startsWith(cwd + "/") ? path.substring(cwd.length + 1) : path;
+      return ig.ignores(rel);
+    };
+  } catch {
+    return () => false;
+  }
 }

@@ -10,7 +10,6 @@ export interface PipelineContext {
   byteSize?: number;
   ramCost?: number;
   mode?: BundleMode;
-  serverOverride?: string;
   skipped?: boolean;
   skipReason?: string;
   error?: Error;

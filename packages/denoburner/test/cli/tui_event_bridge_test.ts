@@ -1,30 +1,13 @@
 import { assertEquals } from "@std/assert";
 import { TuiEventBridge } from "../../src/cli/tui_event_bridge.ts";
-import { TuiEventBus } from "../../src/tui/event_bus.ts";
 import { SilentRenderer } from "../../src/tui/silent_renderer.ts";
-import { UploadQueueManager } from "../../src/state/queue.ts";
-import { FileCache } from "../../src/state/cache.ts";
-import { RpcCommandExecutor } from "../../src/rpc/command.ts";
-import type { DevEnvironment } from "../../src/main.ts";
-import { PendingRequestMap } from "../../src/rpc/pending_requests.ts";
+import { MockLogger, makeMockEnv } from "../support/mocks.ts";
 
-const logger = { info() {}, success() {}, warn() {}, error() {}, child() { return this; } } as any;
-
-function makeEnv(): DevEnvironment {
-  return {
-    server: { start: async () => {}, stop: async () => {} } as any,
-    rpcClient: { sendRequest: () => Promise.resolve({ content: "" }) } as any,
-    commandExecutor: { execute: () => Promise.resolve() } as any,
-    eventBus: new TuiEventBus(),
-    cache: new FileCache(),
-    uploadQueue: new UploadQueueManager(),
-    pendingRequests: new PendingRequestMap(),
-  };
-}
+const logger = new MockLogger();
 
 Deno.test("TuiEventBridge — file_uploaded updates stats", () => {
   const renderer = new SilentRenderer();
-  const env = makeEnv();
+  const env = makeMockEnv();
   const bridge = new TuiEventBridge(renderer, env, logger, logger, "/tmp", false);
   bridge.setup(env.eventBus);
 
@@ -40,7 +23,7 @@ Deno.test("TuiEventBridge — file_uploaded updates stats", () => {
 
 Deno.test("TuiEventBridge — file_error increments errors", () => {
   const renderer = new SilentRenderer();
-  const env = makeEnv();
+  const env = makeMockEnv();
   const bridge = new TuiEventBridge(renderer, env, logger, logger, "/tmp", false);
   bridge.setup(env.eventBus);
 
@@ -50,7 +33,7 @@ Deno.test("TuiEventBridge — file_error increments errors", () => {
 
 Deno.test("TuiEventBridge — file_skipped increments skipCount", () => {
   const renderer = new SilentRenderer();
-  const env = makeEnv();
+  const env = makeMockEnv();
   const bridge = new TuiEventBridge(renderer, env, logger, logger, "/tmp", false);
   bridge.setup(env.eventBus);
 
@@ -60,7 +43,7 @@ Deno.test("TuiEventBridge — file_skipped increments skipCount", () => {
 
 Deno.test("TuiEventBridge — client_connected updates status", () => {
   const renderer = new SilentRenderer();
-  const env = makeEnv();
+  const env = makeMockEnv();
   const bridge = new TuiEventBridge(renderer, env, logger, logger, "/tmp", false);
   bridge.setup(env.eventBus);
 
@@ -70,8 +53,8 @@ Deno.test("TuiEventBridge — client_connected updates status", () => {
 
 Deno.test("TuiEventBridge — client_disconnected updates status", () => {
   const renderer = new SilentRenderer();
-  const env = makeEnv();
-  env.uploadQueue.setOffline(true); // set initial state
+  const env = makeMockEnv();
+  env.uploadQueue.setOffline(true);
   const bridge = new TuiEventBridge(renderer, env, logger, logger, "/tmp", false);
   bridge.setup(env.eventBus);
 
@@ -81,7 +64,7 @@ Deno.test("TuiEventBridge — client_disconnected updates status", () => {
 
 Deno.test("TuiEventBridge — queue_update updates queue stats", () => {
   const renderer = new SilentRenderer();
-  const env = makeEnv();
+  const env = makeMockEnv();
   const bridge = new TuiEventBridge(renderer, env, logger, logger, "/tmp", false);
   bridge.setup(env.eventBus);
 

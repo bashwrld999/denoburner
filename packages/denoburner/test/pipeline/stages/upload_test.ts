@@ -5,7 +5,7 @@ import { FileCache } from "../../../src/state/cache.ts";
 import { UploadQueueManager } from "../../../src/state/queue.ts";
 import type { IRpcClient } from "../../../src/rpc/client.ts";
 import type { PipelineContext } from "../../../src/pipeline/types.ts";
-import type { ILogger } from "../../src/logger/interfaces.ts";
+import type { ILogger } from "../../../src/logger/interfaces.ts";
 
 const logger = { info() {}, success() {}, warn() {}, error() {}, child() { return this; } } as unknown as ILogger;
 

@@ -13,22 +13,20 @@ Deno.test("RpcClient — sends JSON-RPC request and returns result", async () =>
   };
 
   const pending = new PendingRequestMap();
-  const client = new RpcClient(sender, pending, logger);
+  const client = new RpcClient(pending, logger);
+  client.setSender(sender);
 
-  // Start the request
   const promise = client.sendRequest<{ success: true }>("pushFile", {
     filename: "test.ts",
     content: "// code",
     server: "home",
   });
 
-  // The request should have been sent
   const request = JSON.parse(sentMessage);
   assertEquals(request.jsonrpc, "2.0");
   assertEquals(request.method, "pushFile");
   assertEquals(request.params.filename, "test.ts");
 
-  // Resolve the pending request
   pending.resolve(request.id, { success: true });
 
   const result = await promise;
@@ -40,8 +38,9 @@ Deno.test("RpcClient — rejects on timeout", async () => {
     send: (_msg: string) => {},
   };
 
-  const pending = new PendingRequestMap(100); // 100ms timeout
-  const client = new RpcClient(sender, pending, logger);
+  const pending = new PendingRequestMap(100);
+  const client = new RpcClient(pending, logger);
+  client.setSender(sender);
 
   let threw = false;
   try {

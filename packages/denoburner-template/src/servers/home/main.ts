@@ -1,3 +1,3 @@
 export async function main(ns: NS) {
-  ns.print("Hello from denoburner2s222!");
+  ns.print("Hello from denoburner2s222ws!");
 }

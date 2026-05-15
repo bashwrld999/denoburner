@@ -1,5 +1,6 @@
 import type { IWsClient } from "./interfaces.ts";
 import type { ILogger } from "../logger/interfaces.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 
 export class WsClient implements IWsClient {
   private ws: WebSocket | null = null;
@@ -31,7 +32,7 @@ export class WsClient implements IWsClient {
       try {
         this.ws = new WebSocket(url);
       } catch (err) {
-        reject(err);
+        reject(toDenoburnerError(err));
         return;
       }
 
@@ -45,28 +46,34 @@ export class WsClient implements IWsClient {
         this.logger.info(`Connected to ${url}`);
         this.startHeartbeat();
         for (const handler of this.reconnectHandlers) {
-          try { handler(); } catch {}
+          try { handler(); } catch (err) {
+            this.logger.error(`Reconnect handler error: ${toDenoburnerError(err).message}`);
+          }
         }
         resolve();
       };
 
       this.ws.onmessage = (event) => {
         for (const handler of this.messageHandlers) {
-          try { handler(event.data as string); } catch {}
+          try { handler(event.data as string); } catch (err) {
+            this.logger.error(`Message handler error: ${toDenoburnerError(err).message}`);
+          }
         }
       };
 
       this.ws.onerror = (err) => {
         clearTimeout(timeout);
-        this.logger.error(`WebSocket error: ${err}`);
-        reject(err);
+        this.logger.error(`WebSocket error: ${toDenoburnerError(err).message}`);
+        reject(toDenoburnerError(err));
       };
 
       this.ws.onclose = () => {
         this.stopHeartbeat();
         this.logger.info("WebSocket disconnected");
         for (const handler of this.disconnectHandlers) {
-          try { handler(); } catch {}
+          try { handler(); } catch (err) {
+            this.logger.error(`Disconnect handler error: ${toDenoburnerError(err).message}`);
+          }
         }
         if (this.shouldReconnect && !this.closeRequested) {
           this.scheduleReconnect();
@@ -82,7 +89,7 @@ export class WsClient implements IWsClient {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connectInternal(this.url).catch((err) => {
-        this.logger.warn(`Reconnect attempt ${this.reconnectAttempt} failed: ${err}`);
+        this.logger.warn(`Reconnect attempt ${this.reconnectAttempt} failed: ${toDenoburnerError(err).message}`);
       });
     }, delay);
   }
@@ -92,7 +99,8 @@ export class WsClient implements IWsClient {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try {
           this.ws.send(JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 0 }));
-        } catch {
+        } catch (err) {
+          this.logger.warn(`Heartbeat send failed: ${toDenoburnerError(err).message}`);
           this.stopHeartbeat();
         }
       }

@@ -1,14 +1,14 @@
 import { defineCommand } from "citty";
-import { walk } from "@std/fs";
-import { relative } from "@std/path";
 import { loadConfig, validateConfig } from "../../config/loader.ts";
 import { Logger } from "../../logger/logger.ts";
 import { ConsoleTransport } from "../../logger/console_transport.ts";
 import { EsbuildBundler } from "../../bundler/esbuild_bundler.ts";
-import { IdentityBundler } from "../../bundler/identity_bundler.ts";
 import { TuiEventBus } from "../../tui/event_bus.ts";
 import { createBuildPipeline } from "../../pipeline/factory.ts";
-import type { DenoburnerConfig } from "../../config/types.ts";
+import { getSourceDirs } from "../../pipeline/source-mapper.ts";
+import { walk } from "@std/fs";
+import { relative } from "@std/path";
+import { DEFAULT_CONFIG } from "../../config/types.ts";
 import type { PipelineContext } from "../../pipeline/types.ts";
 
 export default defineCommand({
@@ -23,12 +23,8 @@ export default defineCommand({
   },
   async run({ args }) {
     const config = await loadConfig(args.config);
-    const mergedConfig: DenoburnerConfig = {
-      ...config,
-      outDir: args.outDir || config.outDir || "./dist",
-    };
 
-    const { errors, warnings } = validateConfig(mergedConfig);
+    const { errors, warnings } = validateConfig(config);
     if (warnings.length > 0) {
       for (const w of warnings) console.error(`  warning: ${w}`);
     }
@@ -43,26 +39,31 @@ export default defineCommand({
     logger.addTransport(new ConsoleTransport(true));
     const eventBus = new TuiEventBus(logger);
 
-    const hasTsFiles = mergedConfig.watch.some((w) => w.mode === "bundle" || w.mode === "transpile");
-    const bundler = hasTsFiles
-      ? new EsbuildBundler({ sourceMap: mergedConfig.sourceMap, minify: mergedConfig.minify })
-      : new IdentityBundler();
+    const bundler = new EsbuildBundler({
+      sourceMap: config.bundle?.sourceMap,
+      minify: config.bundle?.minify,
+    });
 
-    const pipeline = createBuildPipeline(mergedConfig, bundler, eventBus, logger);
+    const pipeline = createBuildPipeline(config, bundler, eventBus, logger, cwd, args.outDir);
+
+    const sources = config.sources ?? DEFAULT_CONFIG.sources!;
+    const sourceDirs = getSourceDirs(sources, cwd);
 
     const files: string[] = [];
-    for await (const entry of walk(cwd, {
-      exts: [".ts", ".js", ".jsx", ".tsx", ".txt", ".script"],
-      skip: [/node_modules/, /\.git/, /dist/],
-    })) {
-      if (entry.isFile) files.push(entry.path);
+    for (const root of sourceDirs) {
+      for await (const entry of walk(root, {
+        exts: [".ts", ".js", ".jsx", ".tsx", ".txt", ".script", ".json", ".md"],
+        skip: [/\.d\.ts$/, /(^|\/)\.\w/],
+      })) {
+        if (entry.isFile && !entry.name.startsWith(".")) files.push(entry.path);
+      }
     }
 
     logger.info(`Building ${files.length} files...`);
 
     const contexts: PipelineContext[] = files.map((f) => ({
       localPath: f,
-      gameServer: mergedConfig.defaultServer,
+      gameServer: config.defaultServer ?? "home",
       gameFilename: relative(cwd, f),
       startedAt: Date.now(),
     }));

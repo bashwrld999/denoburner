@@ -1,6 +1,7 @@
 import type { ITuiEventBus, ITuiRenderer } from "../tui/interfaces.ts";
 import type { ILogger } from "../logger/interfaces.ts";
 import type { DevEnvironment } from "../environment.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 
 export class TuiEventBridge {
   constructor(
@@ -49,7 +50,7 @@ export class TuiEventBridge {
               Deno.writeTextFileSync(this.cwd + "/NetscriptDefinitions.d.ts", content);
               connectLog.success("Downloaded NetscriptDefinitions.d.ts");
             }).catch((err) => {
-              connectLog.warn(`Failed to download definition file: ${err instanceof Error ? err.message : String(err)}`);
+              connectLog.warn(`Failed to download definition file: ${toDenoburnerError(err).message}`);
             });
           }
           break;

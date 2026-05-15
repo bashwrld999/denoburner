@@ -3,7 +3,7 @@
     "types": ["./global.d.ts"]
   },
   "tasks": {
-    "dev": "deno run -A denoburner/cli dev"
+    "dev": "deno run -A --reload denoburner/cli dev"
   },
   "imports": {
     "react": "npm:@types/react@^18.3.4",

@@ -1,3 +1,5 @@
+import { toDenoburnerError } from "./errors.ts";
+
 export interface RetryOptions {
   maxRetries?: number;
   baseDelayMs?: number;
@@ -19,7 +21,7 @@ export async function retry<T>(
     try {
       return await fn();
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
+      lastError = toDenoburnerError(err);
       if (attempt < maxRetries) {
         options?.onRetry?.(attempt, lastError);
         const delay = backoff === "exponential"

@@ -7,7 +7,7 @@ Deno.test("validateConfig — accepts valid config", () => {
     defaultServer: "home",
     port: 12525,
     host: "localhost",
-    watch: [{ pattern: "**/*.ts", mode: "bundle" }],
+    sources: [{ dir: "src" }],
   };
   const { errors } = validateConfig(config);
   assertEquals(errors.length, 0);
@@ -18,8 +18,8 @@ Deno.test("validateConfig — rejects empty defaultServer", () => {
     defaultServer: "",
     port: 12525,
     host: "localhost",
-    watch: [{ pattern: "**/*.ts", mode: "bundle" }],
-  });
+    sources: [{ dir: "src" }],
+  } as DenoburnerConfig);
   assert(errors.some((e) => e.includes("defaultServer")), "should complain about empty defaultServer");
 });
 
@@ -28,19 +28,19 @@ Deno.test("validateConfig — rejects port out of range", () => {
     defaultServer: "home",
     port: 99999,
     host: "localhost",
-    watch: [{ pattern: "**/*.ts", mode: "bundle" }],
-  });
+    sources: [{ dir: "src" }],
+  } as DenoburnerConfig);
   assert(errors.some((e) => e.includes("port")));
 });
 
-Deno.test("validateConfig — rejects empty watch", () => {
+Deno.test("validateConfig — rejects empty sources", () => {
   const { errors } = validateConfig({
     defaultServer: "home",
     port: 12525,
     host: "localhost",
-    watch: [],
-  });
-  assert(errors.some((e) => e.includes("watch")));
+    sources: [],
+  } as DenoburnerConfig);
+  assert(errors.some((e) => e.includes("source")));
 });
 
 Deno.test("validateConfig — rejects invalid mode", () => {
@@ -48,19 +48,19 @@ Deno.test("validateConfig — rejects invalid mode", () => {
     defaultServer: "home",
     port: 12525,
     host: "localhost",
-    watch: [{ pattern: "**/*.ts", mode: "invalid" as never }],
-  });
+    sources: [{ dir: "src", mode: "invalid" as never }],
+  } as DenoburnerConfig);
   assert(errors.some((e) => e.includes("invalid")));
 });
 
-Deno.test("validateConfig — rejects watch entry missing pattern", () => {
+Deno.test("validateConfig — rejects source entry missing dir", () => {
   const { errors } = validateConfig({
     defaultServer: "home",
     port: 12525,
     host: "localhost",
-    watch: [{ pattern: "", mode: "bundle" }],
-  });
-  assert(errors.some((e) => e.includes("pattern")));
+    sources: [{ dir: "" }],
+  } as DenoburnerConfig);
+  assert(errors.some((e) => e.includes("dir")));
 });
 
 Deno.test("validateConfig — rejects empty host", () => {
@@ -68,8 +68,8 @@ Deno.test("validateConfig — rejects empty host", () => {
     defaultServer: "home",
     port: 12525,
     host: "",
-    watch: [{ pattern: "**/*.ts", mode: "bundle" }],
-  });
+    sources: [{ dir: "src" }],
+  } as DenoburnerConfig);
   assert(errors.some((e) => e.includes("host")));
 });
 
@@ -78,15 +78,16 @@ Deno.test("defineConfig — merges with defaults", () => {
   assertEquals(config.defaultServer, "n00dles");
   assertEquals(config.port, 12525);
   assertEquals(config.host, "localhost");
-  assertEquals(config.watch.length, 2); // defaults applied
+  assertEquals(config.sources?.length, 1);
+  assertEquals(config.sources?.[0].dir, "src");
 });
 
-Deno.test("defineConfig — preserves watch override", () => {
+Deno.test("defineConfig — preserves sources override", () => {
   const config = defineConfig({
-    watch: [{ pattern: "*.ts", mode: "transpile" }],
+    sources: [{ dir: "custom", mode: "transpile" }],
   });
-  assertEquals(config.watch.length, 1);
-  assertEquals(config.watch[0].mode, "transpile");
+  assertEquals(config.sources?.length, 1);
+  assertEquals(config.sources?.[0].mode, "transpile");
 });
 
 Deno.test("validateConfig — returns all errors at once", () => {
@@ -94,7 +95,7 @@ Deno.test("validateConfig — returns all errors at once", () => {
     defaultServer: "",
     port: 0,
     host: "",
-    watch: [],
-  });
+    sources: [],
+  } as DenoburnerConfig);
   assert(errors.length >= 3, "should return multiple errors");
 });

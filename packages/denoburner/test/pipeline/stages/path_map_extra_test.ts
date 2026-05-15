@@ -1,14 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { PathMapStage } from "../../../src/pipeline/stages/path_map.ts";
-import type { DenoburnerConfig } from "../../../src/config/types.ts";
 import type { PipelineContext } from "../../../src/pipeline/types.ts";
-
-const config: DenoburnerConfig = {
-  defaultServer: "home",
-  port: 12525,
-  host: "localhost",
-  watch: [{ pattern: "**/*.ts", mode: "bundle" }],
-};
 
 function makeCtx(localPath: string): PipelineContext {
   return {
@@ -19,19 +11,23 @@ function makeCtx(localPath: string): PipelineContext {
   };
 }
 
-Deno.test("PathMapStage — servers/home deep nesting", async () => {
-  const stage = new PathMapStage(config);
-  const ctx = makeCtx("/project/src/servers/home/lib/sub/hack.ts");
+Deno.test("PathMapStage — preserves values already set by GlobFilterStage", async () => {
+  const stage = new PathMapStage("home", "/project");
+  const ctx: PipelineContext = {
+    localPath: "/project/src/home/lib/sub/hack.ts",
+    gameServer: "home",
+    gameFilename: "lib/sub/hack.ts",
+    startedAt: Date.now(),
+  };
   await stage.execute(ctx);
   assertEquals(ctx.gameServer, "home");
   assertEquals(ctx.gameFilename, "lib/sub/hack.ts");
 });
 
-Deno.test("PathMapStage — servers at root level with custom serversDir", async () => {
-  const customConfig = { ...config, serversDir: "servers" };
-  const stage = new PathMapStage(customConfig);
-  const ctx = makeCtx("/project/servers/test/run.ts");
+Deno.test("PathMapStage — fallback when no values set", async () => {
+  const stage = new PathMapStage("home", "/project");
+  const ctx = makeCtx("/project/lib/utils/run.ts");
   await stage.execute(ctx);
-  assertEquals(ctx.gameServer, "test");
-  assertEquals(ctx.gameFilename, "run.ts");
+  assertEquals(ctx.gameServer, "home");
+  assertEquals(ctx.gameFilename, "lib/utils/run.ts");
 });

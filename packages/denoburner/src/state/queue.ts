@@ -1,3 +1,5 @@
+import { toDenoburnerError } from "../core/errors.ts";
+
 export interface QueuedUpload {
   id: string;
   filePath: string;
@@ -158,7 +160,7 @@ export class UploadQueueManager {
             this.handleFailure(this.pending.shift()!, new Error("Upload returned false"));
           }
         } catch (err) {
-          this.handleFailure(this.pending.shift()!, err instanceof Error ? err : new Error(String(err)));
+          this.handleFailure(this.pending.shift()!, toDenoburnerError(err));
         }
       }
     } finally {

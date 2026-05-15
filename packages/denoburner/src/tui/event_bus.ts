@@ -1,5 +1,6 @@
 import type { ITuiEventBus, TuiEvent } from "./interfaces.ts";
 import type { ILogger } from "../logger/interfaces.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 
 export class TuiEventBus implements ITuiEventBus {
   private handlers: Set<(event: TuiEvent) => void> = new Set();
@@ -11,8 +12,7 @@ export class TuiEventBus implements ITuiEventBus {
       try {
         handler(event);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger?.error(`TuiEventBus handler error: ${msg}`);
+        this.logger?.error(`TuiEventBus handler error: ${toDenoburnerError(err).message}`);
       }
     }
   }

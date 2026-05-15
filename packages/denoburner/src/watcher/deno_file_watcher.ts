@@ -1,5 +1,6 @@
 import { extname } from "@std/path";
 import type { IFileWatcher, FileChangeEvent, WatchOptions } from "./interface.ts";
+import { toDenoburnerError } from "../core/errors.ts";
 
 export class DenoFileWatcher implements IFileWatcher {
   private watcher: Deno.FsWatcher | null = null;
@@ -36,7 +37,9 @@ export class DenoFileWatcher implements IFileWatcher {
     }
     this.debounceTimers.clear();
     if (this.watcher) {
-      try { this.watcher.close(); } catch { /* already closed */ }
+      try { this.watcher.close(); } catch {
+        // already closed
+      }
       this.watcher = null;
     }
   }
@@ -57,9 +60,9 @@ export class DenoFileWatcher implements IFileWatcher {
           this.debounce(path, changeType);
         }
       }
-    } catch (err) {
-      console.error(`File watcher error: ${err}`);
-    }
+      } catch (err) {
+        console.error(`File watcher error: ${toDenoburnerError(err).message}`);
+      }
   }
 
   private shouldSkip(path: string): boolean {
@@ -95,7 +98,7 @@ export class DenoFileWatcher implements IFileWatcher {
       try {
         handler(event);
       } catch {
-        // handler error
+        // handler error — logged at registration site
       }
     }
   }

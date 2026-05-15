@@ -6,23 +6,9 @@ import { validateConfig } from "../../config/loader.ts";
 const CONFIG_CONTENT = `import { defineConfig } from "denoburner";
 
 export default defineConfig({
-  defaultServer: "home",
-  port: 12525,
-  host: "localhost",
-  watch: [
-    { pattern: "src/servers/**/*.{js,ts,jsx,tsx}", mode: "bundle" },
-    { pattern: "src/**/*.{txt,script,json}", mode: "passthrough" },
+  sources: [
+    { dir: "src" },
   ],
-  ignore: ["**/*.d.ts"],
-  sourceMap: false,
-  minify: false,
-  timeout: 30000,
-  ignoreInitial: false,
-  serversDir: "src/servers",
-  hmr: {
-    batchDelay: 100,
-    maxCascadeDepth: 10,
-  },
 });
 `;
 
@@ -72,7 +58,7 @@ export default defineCommand({
     const files: Record<string, string> = {
       "denoburner.config.ts": CONFIG_CONTENT,
       "deno.json": DENO_JSON_CONTENT,
-      "src/servers/home/main.ts": MAIN_TS_CONTENT,
+      "src/home/main.ts": MAIN_TS_CONTENT,
       "src/lib/helpers.ts": HELPERS_TS_CONTENT,
       ".gitignore": GITIGNORE_CONTENT,
     };
@@ -85,13 +71,7 @@ export default defineCommand({
     }
 
     const { errors, warnings } = validateConfig({
-      defaultServer: "home",
-      port: 12525,
-      host: "localhost",
-      watch: [
-        { pattern: "src/servers/**/*.{js,ts,jsx,tsx}", mode: "bundle" },
-        { pattern: "src/**/*.{txt,script,json}", mode: "passthrough" },
-      ],
+      sources: [{ dir: "src" }],
     });
     if (warnings.length > 0) {
       for (const w of warnings) console.log(`  warning: ${w}`);

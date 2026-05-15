@@ -3,12 +3,10 @@ import { normalize } from "@std/path";
 import { ensureDir } from "@std/fs";
 import { Logger } from "../../logger/logger.ts";
 import { ConsoleTransport } from "../../logger/console_transport.ts";
-import { WsClient } from "../../server/ws_client.ts";
-import { RpcClient } from "../../rpc/client.ts";
-import { PendingRequestMap } from "../../rpc/pending_requests.ts";
-import { RpcDispatcher } from "../../rpc/dispatcher.ts";
 import { loadConfig } from "../../config/loader.ts";
 import type { DenoburnerConfig } from "../../config/types.ts";
+import { toDenoburnerError } from "../../core/errors.ts";
+import { connectRpcClient } from "../../cli/connect.ts";
 
 interface FileEntry {
   filename: string;
@@ -50,24 +48,12 @@ export default defineCommand({
 
     const logger = new Logger();
     logger.addTransport(new ConsoleTransport(true));
-    const wsUrl = `ws://${mergedConfig.host}:${mergedConfig.port}`;
 
-    logger.info(`Connecting to ${wsUrl}...`);
-
-    const client = new WsClient(logger);
-    const pending = new PendingRequestMap(30_000);
-    const dispatcher = new RpcDispatcher(pending, logger);
-    const rpcClient = new RpcClient(
-      { send: (msg) => client.send(msg) },
-      pending,
+    const { rpcClient, close } = await connectRpcClient(
+      mergedConfig.host ?? "localhost",
+      mergedConfig.port ?? 12525,
       logger,
     );
-
-    client.onMessage((data) => dispatcher.dispatch(data, {
-      send: (msg) => client.send(msg),
-    }));
-
-    await client.connect(wsUrl);
 
     try {
       logger.info(`Downloading files from "${targetServer}"...`);
@@ -75,7 +61,6 @@ export default defineCommand({
         server: targetServer,
       }) as FileEntry[];
 
-      // Try to fetch metadata for file info display
       let metadata: Array<{ filename: string; size: number; mtime?: number }> = [];
       try {
         metadata = await rpcClient.sendRequest("getAllFileMetadata", { server: targetServer }) as typeof metadata;
@@ -105,15 +90,15 @@ export default defineCommand({
             logger.info(`  ${file.filename} (${file.content.length} bytes)`);
           }
         } catch (err) {
-          logger.error(`  Failed to write ${file.filename}: ${err}`);
+          logger.error(`  Failed to write ${file.filename}: ${toDenoburnerError(err).message}`);
         }
       }
 
       logger.success(`Downloaded ${count} files to ${outDir}`);
     } catch (err) {
-      logger.error(`Download failed: ${err}`);
+      logger.error(`Download failed: ${toDenoburnerError(err).message}`);
     } finally {
-      client.close();
+      close();
     }
   },
 });

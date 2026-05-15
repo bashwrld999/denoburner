@@ -142,6 +142,7 @@ export class ConsolePanel implements ITuiComponent {
   private wrapWords(text: string, maxWidth: number, prefix: string): string[] {
     const result: string[] = [];
     let remaining = text;
+    const prefixLen = stripAnsi(prefix).length;
 
     while (remaining.length > 0) {
       const plainLen = stripAnsi(remaining).length;
@@ -152,14 +153,26 @@ export class ConsolePanel implements ITuiComponent {
 
       const visible = visibleSlice(remaining, maxWidth);
       const plain = stripAnsi(visible);
-      const lastSpace = plain.lastIndexOf(" ");
+      // The first line has no prefix, subsequent lines do
+      const isFirstLine = result.length === 0;
+      const minSpaceIdx = isFirstLine ? 0 : prefixLen;
+      // Find last space that's past any prefix padding
+      let lastSpace = -1;
+      for (let i = plain.length - 1; i >= minSpaceIdx; i--) {
+        if (plain[i] === " ") { lastSpace = i; break; }
+      }
 
-      if (lastSpace > 0) {
-        result.push(visibleSlice(remaining, lastSpace));
-        remaining = prefix + remaining.slice(stripAnsi(visibleSlice(remaining, lastSpace)).length + 1);
+      if (lastSpace > minSpaceIdx) {
+        const wrapped = visibleSlice(remaining, lastSpace);
+        result.push(wrapped);
+        remaining = prefix + remaining.slice(wrapped.length);
+        // Skip following whitespace after the wrapped portion
+        while (remaining.length > prefixLen && remaining[prefixLen] === " ") {
+          remaining = remaining.slice(0, prefixLen) + remaining.slice(prefixLen + 1);
+        }
       } else {
         result.push(visible);
-        remaining = prefix + remaining.slice(stripAnsi(visible).length);
+        remaining = prefix + remaining.slice(visible.length);
       }
 
       if (result.length >= 20) break;

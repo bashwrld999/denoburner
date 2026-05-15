@@ -6,11 +6,11 @@ import { FileTransport } from "../../logger/file_transport.ts";
 import { AnsiRenderer } from "../../tui/ansi_renderer.ts";
 import { SilentRenderer } from "../../tui/silent_renderer.ts";
 import { EsbuildBundler } from "../../bundler/esbuild_bundler.ts";
-import { IdentityBundler } from "../../bundler/identity_bundler.ts";
 import { DenoFileWatcher } from "../../watcher/deno_file_watcher.ts";
 import { DependencyGraph } from "../../watcher/dependency-graph.ts";
 import { DevServer } from "../dev_server.ts";
 import { createDevEnvironment } from "../../environment.ts";
+import { parsePort } from "../port.ts";
 import type { DenoburnerConfig } from "../../config/types.ts";
 
 export default defineCommand({
@@ -34,11 +34,7 @@ export default defineCommand({
 
     const config = await loadConfig(args.config);
 
-    const port = parseInt(args.port);
-    if (isNaN(port) || port < 1 || port > 65535) {
-      console.error(`Invalid port: "${args.port}". Must be 1-65535.`);
-      Deno.exit(1);
-    }
+    const port = parsePort(args.port);
 
     const mergedConfig: DenoburnerConfig = {
       ...config,
@@ -65,9 +61,10 @@ export default defineCommand({
     }
     const env = createDevEnvironment(mergedConfig, systemLog);
 
-    const bundler = mergedConfig.watch.some((w) => w.mode === "bundle" || w.mode === "transpile")
-      ? new EsbuildBundler({ sourceMap: mergedConfig.sourceMap, minify: mergedConfig.minify })
-      : new IdentityBundler();
+    const bundler = new EsbuildBundler({
+      sourceMap: mergedConfig.bundle?.sourceMap,
+      minify: mergedConfig.bundle?.minify,
+    });
 
     const maxDepth = mergedConfig.hmr?.maxCascadeDepth ?? 10;
     const depGraph = new DependencyGraph(maxDepth);

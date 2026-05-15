@@ -15,6 +15,10 @@ export class RpcCommandExecutor {
     private maxRetries: number = 2,
   ) {}
 
+  get client(): IRpcClient {
+    return this.rpcClient;
+  }
+
   async execute<T>(command: RpcCommand<T>): Promise<T> {
     return retry(
       async () => {
@@ -24,7 +28,13 @@ export class RpcCommandExecutor {
         this.logger.info(`← ${command.method} OK`);
         return result;
       },
-      { maxRetries: this.maxRetries, baseDelayMs: 200 },
+      {
+        maxRetries: this.maxRetries,
+        baseDelayMs: 200,
+        onRetry: (attempt, error) => {
+          this.logger.warn(`↻ ${command.method} retry ${attempt}: ${error.message}`);
+        },
+      },
     );
   }
 }

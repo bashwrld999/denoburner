@@ -1,9 +1,15 @@
 export type BundleMode = "passthrough" | "transpile" | "bundle";
 
-export interface WatchEntry {
+export interface PatternEntry {
   pattern: string;
   mode: BundleMode;
+}
+
+export interface SourceEntry {
+  dir: string;
+  mode?: BundleMode;
   server?: string;
+  patterns?: PatternEntry[];
 }
 
 export interface HmrConfig {
@@ -11,28 +17,28 @@ export interface HmrConfig {
   maxCascadeDepth?: number;
 }
 
-export interface DenoburnerConfig {
-  outDir?: string;
-  defaultServer: string;
-  port: number;
-  host: string;
-  watch: WatchEntry[];
-  ignore?: string[];
+export interface BundleConfig {
   sourceMap?: boolean;
   minify?: boolean;
-  timeout?: number;
-  ignoreInitial?: boolean;
-  serversDir?: string;
+}
+
+export interface DenoburnerConfig {
+  host?: string;
+  port?: number;
+  defaultServer?: string;
+  sources?: SourceEntry[];
+  bundle?: BundleConfig;
   hmr?: HmrConfig;
+  plugins?: string[];
   logFile?: string;
+  skipInitialSync?: boolean;
+  timeout?: number;
 }
 
 export const DEFAULT_CONFIG: DenoburnerConfig = {
   defaultServer: "home",
   port: 12525,
   host: "localhost",
-  watch: [
-    { pattern: "src/servers/**/*.{js,ts,jsx,tsx}", mode: "bundle" },
-    { pattern: "src/**/*.{script,txt,json}", mode: "passthrough" },
-  ],
+  sources: [{ dir: "src" }],
+  timeout: 30_000,
 };

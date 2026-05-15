@@ -1,24 +1,12 @@
 import { assertEquals } from "@std/assert";
 import { GlobFilterStage } from "../../../src/pipeline/stages/glob_filter.ts";
 import { ReadFileStage } from "../../../src/pipeline/stages/read_file.ts";
-import { PathMapStage } from "../../../src/pipeline/stages/path_map.ts";
 import { IdentityBundler } from "../../../src/bundler/identity_bundler.ts";
 import { BundleStage } from "../../../src/pipeline/stages/bundle.ts";
 import { NotifyStage } from "../../../src/pipeline/stages/notify.ts";
 import { UploadPipeline } from "../../../src/pipeline/pipeline.ts";
 import { TuiEventBus } from "../../../src/tui/event_bus.ts";
-import type { DenoburnerConfig } from "../../../src/config/types.ts";
 import type { PipelineContext } from "../../../src/pipeline/types.ts";
-
-const config: DenoburnerConfig = {
-  defaultServer: "home",
-  port: 12525,
-  host: "localhost",
-  watch: [
-    { pattern: "**/*.ts", mode: "bundle" },
-    { pattern: "**/*.txt", mode: "passthrough" },
-  ],
-};
 
 Deno.test("Full build pipeline — .ts file", async () => {
   const tmpDir = await Deno.makeTempDir({ prefix: "denoburner-int-" });
@@ -31,15 +19,14 @@ Deno.test("Full build pipeline — .ts file", async () => {
 
   const bundler = new IdentityBundler();
   const pipeline = new UploadPipeline()
-    .use(new GlobFilterStage(config))
+    .use(new GlobFilterStage([{ dir: tmpDir }], tmpDir, "home"))
     .use(new ReadFileStage())
     .use(new BundleStage(bundler))
-    .use(new PathMapStage(config))
     .use(new NotifyStage(eventBus));
 
   const ctx: PipelineContext = {
     localPath: filePath,
-    gameServer: "",
+    gameServer: "home",
     gameFilename: "hack.ts",
     startedAt: Date.now(),
   };
@@ -64,10 +51,9 @@ Deno.test("Full build pipeline — .txt file passthrough", async () => {
   const eventBus = new TuiEventBus();
   const bundler = new IdentityBundler();
   const pipeline = new UploadPipeline()
-    .use(new GlobFilterStage(config))
+    .use(new GlobFilterStage([{ dir: tmpDir }], tmpDir, "home"))
     .use(new ReadFileStage())
     .use(new BundleStage(bundler))
-    .use(new PathMapStage(config))
     .use(new NotifyStage(eventBus));
 
   const ctx: PipelineContext = {
@@ -85,7 +71,7 @@ Deno.test("Full build pipeline — .txt file passthrough", async () => {
   await Deno.remove(tmpDir, { recursive: true });
 });
 
-Deno.test("Full build pipeline — skipped file", async () => {
+Deno.test("Full build pipeline — skipped file outside source dir", async () => {
   const tmpDir = await Deno.makeTempDir({ prefix: "denoburner-int-" });
   const filePath = tmpDir + "/secret.json";
   await Deno.writeTextFile(filePath, "{}");
@@ -93,10 +79,9 @@ Deno.test("Full build pipeline — skipped file", async () => {
   const eventBus = new TuiEventBus();
   const bundler = new IdentityBundler();
   const pipeline = new UploadPipeline()
-    .use(new GlobFilterStage(config))
+    .use(new GlobFilterStage([{ dir: "/other/project" }], tmpDir, "home"))
     .use(new ReadFileStage())
     .use(new BundleStage(bundler))
-    .use(new PathMapStage(config))
     .use(new NotifyStage(eventBus));
 
   const ctx: PipelineContext = {
@@ -112,20 +97,18 @@ Deno.test("Full build pipeline — skipped file", async () => {
   await Deno.remove(tmpDir, { recursive: true });
 });
 
-Deno.test("Full build pipeline — server detection via /src/servers/", async () => {
+Deno.test("Full build pipeline — server detection via subdirectory", async () => {
   const tmpDir = await Deno.makeTempDir({ prefix: "denoburner-int-" });
-  const serverDir = tmpDir + "/src/servers/n00dles";
-  await Deno.mkdir(serverDir, { recursive: true });
-  const filePath = serverDir + "/early_hack.ts";
+  const filePath = tmpDir + "/n00dles/early_hack.ts";
+  await Deno.mkdir(tmpDir + "/n00dles", { recursive: true });
   await Deno.writeTextFile(filePath, "export function main() {}");
 
   const eventBus = new TuiEventBus();
   const bundler = new IdentityBundler();
   const pipeline = new UploadPipeline()
-    .use(new GlobFilterStage(config))
+    .use(new GlobFilterStage([{ dir: tmpDir }], tmpDir, "home"))
     .use(new ReadFileStage())
     .use(new BundleStage(bundler))
-    .use(new PathMapStage(config))
     .use(new NotifyStage(eventBus));
 
   const ctx: PipelineContext = {
