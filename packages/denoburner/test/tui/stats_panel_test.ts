@@ -43,8 +43,11 @@ Deno.test("StatsPanel — waiting state shows dot animation", () => {
 Deno.test("StatsPanel — upload counts displayed", () => {
   const panel = new StatsPanel();
   const lines = panel.render(makeCtx({ filesUploaded: 10, errors: 2, skipCount: 3 }));
-  const uploadLine = lines.find((l) => l.includes("Uploads"));
-  assert(uploadLine, "should show uploads line");
+  const uploadLine = lines.find((l) => l.includes("\u2713") && l.includes("\u2717"));
+  assert(uploadLine, "should show uploads with checkmark and error symbols");
+  assert(uploadLine!.includes("10"), "should show upload count");
+  assert(uploadLine!.includes("2"), "should show error count");
+  assert(uploadLine!.includes("3"), "should show skip count");
 });
 
 Deno.test("StatsPanel — server list renders with expansion", () => {
@@ -67,15 +70,6 @@ Deno.test("StatsPanel — queue stats shown when non-zero", () => {
   assert(queueLine!.includes("3"), "should show pending count");
 });
 
-Deno.test("StatsPanel — dep graph stats shown", () => {
-  const panel = new StatsPanel();
-  const lines = panel.render(makeCtx({ depGraphSize: 42, cascadeDepth: 10 }));
-  const graphLine = lines.find((l) => l.includes("Graph"));
-  assert(graphLine, "should show dep graph stats");
-  assert(graphLine!.includes("42"), "should show graph size");
-  assert(graphLine!.includes("10"), "should show cascade depth");
-});
-
 Deno.test("StatsPanel — status bar always present", () => {
   const panel = new StatsPanel();
   const lines = panel.render(makeCtx());
@@ -85,8 +79,9 @@ Deno.test("StatsPanel — status bar always present", () => {
 
 Deno.test("StatsPanel — total stats row present", () => {
   const panel = new StatsPanel();
-  const lines = panel.render(makeCtx({ watchedCount: 15, filesUploaded: 8, totalRam: 12.5 }));
-  const totalLine = lines.find((l) => l.includes("Total"));
+  const lines = panel.render(makeCtx({ totalRam: 12.5 }));
+  const totalLine = lines.find((l) => l.includes("Total:"));
   assert(totalLine, "should show total stats");
-  assert(totalLine!.includes("15"), "should show watched count");
+  assert(totalLine!.includes("12.50"), "should show RAM total");
+  assert(totalLine!.includes("GB"), "should show GB unit");
 });

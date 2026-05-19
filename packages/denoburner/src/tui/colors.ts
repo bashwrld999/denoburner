@@ -60,8 +60,9 @@ export function visibleLen(s: string): number {
 }
 
 export function visiblePadEnd(s: string, len: number): string {
-  const pad = Math.max(0, len - visibleLen(s));
-  return s + " ".repeat(pad);
+  const visLen = visibleLen(s);
+  if (visLen >= len) return visibleSlice(s, len) + reset;
+  return s + " ".repeat(len - visLen);
 }
 
 export function visibleSlice(s: string, max: number): string {

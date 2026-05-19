@@ -80,9 +80,8 @@ export class ConsolePanel implements ITuiComponent {
       if (lines.length >= height) break;
       const entry = filtered[i];
       const prefixLen = this.measurePrefix(entry);
-      const messageWidth = width - prefixLen;
       const formatted = this.renderLine(entry);
-      const wrapped = this.wrapWords(formatted, messageWidth, " ".repeat(prefixLen));
+      const wrapped = this.wrapWords(formatted, width, " ".repeat(prefixLen));
       for (const line of wrapped) {
         if (lines.length >= height) break;
         lines.push(line);

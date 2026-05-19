@@ -24,12 +24,17 @@ export class AnsiRenderer implements ITuiRenderer {
   private onShutdown: OnShutdown = () => {};
   private renderTimer = 0;
   private uptimeTimer = 0;
+  private minConsoleWidth = 40;
+  private minLeftWidth = 46;
+  private resizeHandler = () => {
+    if (this.running) this.render();
+  };
 
   constructor(onShutdown?: OnShutdown) {
     if (onShutdown) this.onShutdown = onShutdown;
     const statsPanel = new StatsPanel();
     const consolePanel = new ConsolePanel();
-    this.layout = new SplitLayout(statsPanel, consolePanel, 0.20);
+    this.layout = new SplitLayout(statsPanel, consolePanel, 0.20, this.minLeftWidth);
   }
 
   start(): void {
@@ -103,7 +108,7 @@ export class AnsiRenderer implements ITuiRenderer {
   private render(): void {
     if (!this.running) return;
     const { columns, rows } = this.getTerminalSize();
-    if (columns < 60 || rows < 10) return;
+    if (columns < Math.max(60, this.minLeftWidth + 3 + this.minConsoleWidth) || rows < 10) return;
 
     const lines = this.layout.render({
       width: columns,
@@ -113,7 +118,7 @@ export class AnsiRenderer implements ITuiRenderer {
       showHelp: this.showHelp,
     });
 
-    const output = ANSI.home + lines.join("\r\n");
+    const output = ANSI.home + lines.join("\r\n") + "\x1b[J";
     Deno.stdout.writeSync(new TextEncoder().encode(output));
   }
 
@@ -136,7 +141,7 @@ export class AnsiRenderer implements ITuiRenderer {
   private getTerminalSize(): { columns: number; rows: number } {
     try {
       const size = Deno.consoleSize();
-      return { columns: Math.max(80, size.columns), rows: Math.max(24, size.rows) };
+      return { columns: size.columns, rows: size.rows };
     } catch {
       return { columns: 80, rows: 24 };
     }
@@ -144,9 +149,7 @@ export class AnsiRenderer implements ITuiRenderer {
 
   private listenForResize(): void {
     try {
-      Deno.addSignalListener("SIGWINCH", () => {
-        if (this.running) this.render();
-      });
+      Deno.addSignalListener("SIGWINCH", this.resizeHandler);
     } catch {
       // SIGWINCH not available
     }
@@ -154,7 +157,7 @@ export class AnsiRenderer implements ITuiRenderer {
 
   private removeResizeListener(): void {
     try {
-      Deno.removeSignalListener("SIGWINCH", () => {});
+      Deno.removeSignalListener("SIGWINCH", this.resizeHandler);
     } catch {
       // not registered
     }

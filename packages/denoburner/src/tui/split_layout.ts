@@ -22,6 +22,7 @@ export class SplitLayout implements ITuiComponent {
     private left: ITuiComponent,
     private right: ITuiComponent,
     leftRatio = 0.20,
+    private minLeftWidth = 0,
   ) {
     this.leftRatio = leftRatio;
   }
@@ -31,7 +32,7 @@ export class SplitLayout implements ITuiComponent {
     const totalH = ctx.height;
 
     const contentW = totalW - 3;
-    const leftW = Math.floor(contentW * this.leftRatio);
+    const leftW = this.minLeftWidth > 0 ? this.minLeftWidth : Math.floor(contentW * this.leftRatio);
     const rightW = contentW - leftW;
 
     const leftCtx: RenderContext = { ...ctx, width: leftW, height: totalH - 2 };
